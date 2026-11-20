@@ -381,10 +381,10 @@ capabilities `/v1/models` states, its table of known Claude models standing in w
 states none. `clients/foundry.py` subclasses it, with deployment names and model identities from
 `settings.providers.ProviderConfig.deployments`.
 
-`encryption.keys` resolves sealed keys and Windows credential references at launch, before
-configuration is injected into the providers. `encryption.credentials` owns the Windows Credential
-Manager calls; neither providers nor settings reaches it. `scripts/configure_foundry.py` prompts
-locally for a key and saves only its reference through the settings commit mechanism.
+`encryption.keys` resolves sealed keys and Windows credential references before they reach a
+provider. `encryption.credentials` owns the Windows Credential Manager calls; neither providers
+nor settings reaches it. `scripts/configure_foundry.py` prompts locally for a key and saves only
+its reference through the settings commit mechanism.
 
 ## Protected names
 

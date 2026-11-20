@@ -3,6 +3,7 @@
 import argparse
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from otaku.backend.app.paths import Paths
 from otaku.encryption.credentials import CredentialError, store
@@ -30,10 +31,12 @@ def main() -> None:
     paths = Paths.resolve(args.home)
     if not paths.providers_file.exists():
         parser.error("Initialize this home with otaku first, then run this command.")
-    # Validate the current file before asking for or storing a key.
-    load(paths.providers_file)
-    if not args.model.startswith("claude-"):
-        parser.error("--model must be a Claude model id.")
+    # Validate before asking for or storing a key.
+    try:
+        load(paths.providers_file)
+        _validate_config(args.endpoint, args.deployment, args.model)
+    except ConfigError as e:
+        parser.error(str(e))
     try:
         reference = store(args.target, _read_key())
     except CredentialError as e:
@@ -54,6 +57,7 @@ def _save_config(
     model_id: str,
     reference: str,
 ) -> None:
+    _validate_config(endpoint, deployment, model_id)
     config = load(paths.providers_file).get("foundry")
     deployments = dict(config.deployments) if config else {}
     deployments[deployment] = model_id
@@ -82,8 +86,32 @@ def _save_config(
         raise ConfigError("providers.toml could not be updated; run again to retry.")
 
 
+def _validate_config(endpoint: str, deployment: str, model_id: str) -> None:
+    try:
+        url = urlsplit(endpoint)
+        is_valid_endpoint = bool(
+            endpoint == endpoint.strip()
+            and url.scheme in ("http", "https")
+            and url.hostname
+            and not url.query
+            and not url.fragment
+        )
+    except ValueError:
+        is_valid_endpoint = False
+    if not is_valid_endpoint:
+        raise ConfigError(
+            "The Foundry endpoint must be an HTTP(S) URL without a query or fragment."
+        )
+    if not deployment.strip():
+        raise ConfigError("The Foundry deployment name must not be empty.")
+    if not model_id.startswith("claude-"):
+        raise ConfigError("The Foundry model id must start with 'claude-'.")
+
+
 def _read_key() -> str:
     """Read without console echo, showing only stars; reject control input."""
+    if sys.platform != "win32":
+        raise CredentialError("A Windows terminal is required to read the key.")
     import msvcrt
 
     # PowerShell leaves bracketed paste on; raw secret input must not

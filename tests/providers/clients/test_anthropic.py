@@ -9,6 +9,7 @@ from otaku.providers.clients.anthropic import (
     _knobs,
     _stated_thinking,
     capabilities,
+    model_info,
     spec_of,
 )
 
@@ -47,7 +48,7 @@ class TestStatedThinking:
     def test_adaptive_rungs_are_the_supported_efforts_and_off_is_a_rung(self) -> None:
         thinking = _stated_thinking(_ADAPTIVE_AND_OFF)
         assert thinking == Thinking(
-            efforts=frozenset({"low", "medium", "high", "max"}), disabled=True
+            efforts=frozenset({"low", "medium", "high", "max"}), can_disable=True
         )
         caps = capabilities(thinking)
         assert caps.reasoning_efforts == {"none", "low", "medium", "high", "max"}
@@ -69,7 +70,7 @@ class TestStatedThinking:
 class TestKnobs:
     def test_a_rung_is_adaptive_thinking_at_that_effort(self) -> None:
         assert _knobs("m", "high", _stated_thinking(_ADAPTIVE_AND_OFF), 4096) == {
-            "thinking": {"type": "adaptive"},
+            "thinking": {"type": "adaptive", "display": "summarized"},
             "output_config": {"effort": "high"},
         }
 
@@ -101,6 +102,15 @@ class TestKnownModels:
         assert spec_of("claude-haiku-4-5-20251001") == spec_of("claude-haiku-4-5")
         assert spec_of("claude-haiku-4-5") is not None
         assert spec_of("claude-unknown-1") is None
+
+    def test_an_unknown_models_unstated_capabilities_are_unknown(self) -> None:
+        model = model_info("claude-unknown-1", None)
+        assert model.capabilities is not None
+        assert model.capabilities.vision is None
+        assert model.capabilities.structured_output is None
+        assert model.capabilities.reasoning_efforts is None
+        assert model.capabilities.reasoning_switch is None
+        assert model.capabilities.reasoning_budget is None
 
 
 class TestClient:

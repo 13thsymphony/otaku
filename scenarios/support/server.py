@@ -24,6 +24,7 @@ import time
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 CHAT_REPLY = "The light went out, and something stirred in the dark."
 STORY_SO_FAR = "The guest reached the gate and met the Keeper."
@@ -93,6 +94,8 @@ class ModelServer:
         self.token_count: int | None = None  # every count endpoint answers this; None → 404
         # Anthropic's /v1/models rows, served under /anthropic/v1/models.
         self.anthropic_models: list[dict[str, Any]] = []
+        self.anthropic_cursor_missing = False
+        self.anthropic_error_after: int | None = None
         self.router = False  # True → llama.cpp's router listing and load/unload doors
         self.router_failed: set[str] = set()  # names whose load ends failed, unloaded
         self.router_sleeping: set[str] = set()  # loaded names the router put to sleep
@@ -282,14 +285,18 @@ class ModelServer:
                         return
                     # One page per request, so a listing must follow the cursor.
                     claude = outer.anthropic_models
-                    after = self.path.split("after_id=", 1)[1] if "after_id=" in self.path else ""
+                    after = parse_qs(urlsplit(self.path).query).get("after_id", [""])[0]
                     start = next((i + 1 for i, row in enumerate(claude) if row["id"] == after), 0)
                     page = claude[start : start + 1]
                     self._json(
                         {
                             "data": page,
                             "has_more": start + 1 < len(claude),
-                            "last_id": page[-1]["id"] if page else None,
+                            "last_id": (
+                                page[-1]["id"]
+                                if page and not outer.anthropic_cursor_missing
+                                else None
+                            ),
                         }
                     )
                     return
@@ -658,7 +665,9 @@ class ModelServer:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
                 self.end_headers()
-                with contextlib.suppress(BrokenPipeError, ConnectionResetError):
+                with contextlib.suppress(
+                    BrokenPipeError, ConnectionAbortedError, ConnectionResetError
+                ):
                     if outer.decline is not None:
                         self._event({"type": "error", "error": {"message": outer.decline}})
                         return
@@ -679,6 +688,17 @@ class ModelServer:
                         step = outer.chunk_size or max(1, len(value) // 3)
                         for sent, i in enumerate(range(0, len(value), step)):
                             if outer.fail_after is not None and sent >= outer.fail_after:
+                                return
+                            if (
+                                outer.anthropic_error_after is not None
+                                and sent >= outer.anthropic_error_after
+                            ):
+                                self._event(
+                                    {
+                                        "type": "error",
+                                        "error": {"type": "overloaded_error", "message": "Busy"},
+                                    }
+                                )
                                 return
                             if outer.chunk_delay:
                                 time.sleep(outer.chunk_delay)

@@ -199,15 +199,18 @@ api_key = "" # reads ANTHROPIC_API_KEY when empty
 prompt_cache = "5m" # "1h" or "off" are also supported
 ```
 
+Use HTTPS for non-local endpoints: HTTP sends the API key unencrypted.
+
 The picker lists every model on your account with the context length, reply limit, vision and
-thinking controls Anthropic states for it. Opus 5.5 and the other adaptive models accept `low`,
-`medium`, `high`, `xhigh` and `max` effort levels; Haiku 4.5 uses an on/off switch or a
-thinking budget of at least 1024 tokens, smaller than `max_tokens`. Sampling controls are
-omitted, a reply limit includes thinking tokens, and raw text completion is unavailable; use
-a chat-wire layout. System instructions must precede the conversation. An assistant-ending
-transcript continues with a user `Continue.` request, because newer Claude models reject
-assistant prefills. On Windows the key can also be a `wincred:` Credential Manager reference,
-as described for Foundry below.
+thinking controls Anthropic states for it. Opus 5.5 accepts `low`, `medium`, `high`, `xhigh`
+and `max` effort levels; other adaptive models expose the levels Anthropic reports. Haiku 4.5
+uses an on/off switch or a thinking budget of at least 1024 tokens, smaller than `max_tokens`.
+Selecting an adaptive effort requests a summary of the model's thinking for streaming. Sampling
+controls are omitted, a reply limit includes thinking tokens, and raw text completion is
+unavailable; use a chat-wire layout. System instructions must precede the conversation. An
+assistant-ending transcript continues with a user `Continue.` request, because newer Claude
+models reject assistant prefills. On Windows the key can also be a `wincred:` Credential Manager
+reference, as described for Foundry below.
 
 ### Azure Foundry Claude (version 2)
 
@@ -223,18 +226,21 @@ prompt_cache = "5m" # "1h" or "off" are also supported
 deployments = { YOUR-DEPLOYMENT = "claude-opus-5-5" }
 ```
 
-The URL can also end in `/v1` or `/v1/messages`. Deployment names must match Azure exactly;
-the values identify the underlying Claude models, even when a deployment has a custom name.
-Foundry v2 has no model-listing endpoint: the picker lists the configured deployments after
-validating each with a token-count request. Restart otaku after editing the file, then select
-the deployment from the model picker in either frontend.
+The URL can also end in `/v1` or `/v1/messages`; omit any query or fragment. Deployment names
+must match Azure exactly; the values identify the underlying Claude models, even when a
+deployment has a custom name. Authentication uses an API key; Microsoft Entra ID-only deployments
+are not supported. The native Messages endpoint has no model list: the picker lists the
+configured deployments after validating each with a token-count request. Restart otaku after
+editing the file, then select the deployment from the model picker in either frontend.
 
 Opus 5.5 uses adaptive thinking and accepts `low`, `medium`, `high`, `xhigh` and `max` effort
 levels; it cannot disable thinking or use a manual budget. The same effort controls are
-available for Azure-hosted Opus 5, Opus 4.8, Sonnet 5/5.5 and Haiku 5.5. Haiku 4.5 uses an
-on/off switch or a thinking budget of at least 1024 tokens, smaller than `max_tokens`.
-Other Claude identities can be configured without model-specific context or thinking facts.
-Sampling, completion and transcript rules are the Anthropic provider's, above.
+available for Azure-hosted Opus 5, Opus 4.8, Sonnet 5/5.5 and Haiku 5.5. Opus 5, Opus 4.8,
+Sonnet 5 and Haiku 5.5 can also disable thinking. Haiku 4.5 uses an on/off switch or a
+thinking budget of at least 1024 tokens, smaller than `max_tokens`.
+Other Claude identities can be configured without model-specific context, vision,
+structured-output or thinking facts. Sampling, completion and transcript rules are the
+Anthropic provider's, above.
 
 On Windows, store the API key in **Credential Manager** from a local masked prompt.
 From this checkout, after initializing the selected otaku home:

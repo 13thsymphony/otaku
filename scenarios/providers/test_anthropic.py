@@ -3,10 +3,12 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+import pytest
+
 from otaku.backend import launch as backend_launch
 from otaku.backend.api import Api, ModelRef, ModelRole
 from otaku.backend.app.paths import Paths
-from otaku.providers import ProviderConfig, Reasoning, Text, autoconfigure
+from otaku.providers import ProviderConfig, ProviderError, Reasoning, Text, autoconfigure
 from otaku.providers.clients.anthropic import AnthropicClient
 from otaku.settings import providers as providers_file
 from otaku.settings import write_atomic
@@ -62,6 +64,28 @@ class TestListing:
         assert haiku.context_length == 200_000
         assert haiku.capabilities.reasoning_budget is True
 
+    @pytest.mark.parametrize("missing", [True, False])
+    def test_a_missing_or_repeated_cursor_fails_instead_of_truncating_the_listing(
+        self, server: ModelServer, missing: bool
+    ) -> None:
+        client = _client(server)
+        server.anthropic_cursor_missing = missing
+        server.anthropic_models = [{"id": name} for name in ("same", "same", "third")]
+        with pytest.raises(ProviderError):
+            client.models.list(timeout=1.0)
+        assert len(server.gets) <= 2
+
+    def test_a_cursor_with_reserved_characters_is_sent_as_one_query_value(
+        self, server: ModelServer
+    ) -> None:
+        client = _client(server)
+        server.anthropic_models = [{"id": "claude+legacy"}, {"id": "claude-new"}]
+        assert [model.name for model in client.models.list(timeout=1.0)] == [
+            "claude+legacy",
+            "claude-new",
+        ]
+        assert len(server.gets) == 2
+
     def test_a_listed_model_thinks_as_listed(self, server: ModelServer) -> None:
         client = _client(server)
         client.models.list()
@@ -73,7 +97,7 @@ class TestListing:
         assert "".join(c.text for c in chunks if isinstance(c, Text)) == "Answer"
         sent = server.requests[-1]
         assert sent["model"] == "claude-opus-5-5"
-        assert sent["thinking"] == {"type": "adaptive"}
+        assert sent["thinking"] == {"type": "adaptive", "display": "summarized"}
         assert sent["output_config"] == {"effort": "xhigh"}
         list(
             client.completion.chat(
@@ -91,6 +115,20 @@ class TestListing:
         assert server.posts[-1] == "/anthropic/v1/messages/count_tokens"
         assert server.request_headers[-1]["x-api-key"] == "fake-key"
         assert server.request_headers[-1]["anthropic-version"] == "2023-06-01"
+
+    def test_counting_accepts_a_budget_larger_than_the_default_reply_limit(
+        self, server: ModelServer
+    ) -> None:
+        client = _client(server)
+        assert (
+            client.completion.count_chat_tokens(
+                "claude-haiku-4-5", [_Turn("user", "Hi")], level="8192"
+            )
+            == 17
+        )
+        sent = server.requests[-1]
+        assert sent["thinking"] == {"type": "enabled", "budget_tokens": 8192}
+        assert "max_tokens" not in sent
 
 
 class TestSetup:
@@ -116,6 +154,17 @@ class TestSetup:
             api = Api(backend)
             api.providers.list(scope="anthropic")
             api.app.update(models={ModelRole.WRITING: ModelRef("anthropic", "claude-opus-5-5")})
+            settings = api.providers.models.settings.get("anthropic", "claude-opus-5-5")
+            assert set(settings.choices.levels) == {
+                "unset",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+            }
+            assert not settings.choices.budget
+            api.providers.models.settings.update("anthropic", "claude-opus-5-5", think="high")
             story = api.stories.create().value
             assert list(
                 api.stories.messages.create(
@@ -125,6 +174,9 @@ class TestSetup:
             messages = api.stories.messages.list(story.id)
             assert messages[-1].body == "The light went out, and something stirred in the dark."
             assert "/anthropic/v1/messages" in server.posts
+            sent = next(body for body in server.requests if body.get("stream") is True)
+            assert sent["thinking"] == {"type": "adaptive", "display": "summarized"}
+            assert sent["output_config"] == {"effort": "high"}
         finally:
             backend.close()
 

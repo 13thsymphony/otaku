@@ -41,6 +41,7 @@ def store(target: str, api_key: str) -> str:
     """Save a generic credential for the current user; return its reference."""
     if not target or not api_key:
         raise CredentialError("A credential target and a nonempty API key are required.")
+    _validate_target(target)
     if any(ord(c) < 32 or ord(c) == 127 for c in api_key):
         raise CredentialError(
             "The API key contains control characters; enter it again at the secure prompt."
@@ -69,9 +70,11 @@ def resolve(reference: str) -> str:
     """Read one reference; a missing credential is an explicit error."""
     if not reference.startswith(PREFIX) or not reference[len(PREFIX) :]:
         raise CredentialError("Invalid Windows credential reference.")
+    target = reference[len(PREFIX) :]
+    _validate_target(target)
     api = _api()
     found = ctypes.POINTER(_Credential)()
-    if not api.CredReadW(reference[len(PREFIX) :], _GENERIC, 0, ctypes.byref(found)):
+    if not api.CredReadW(target, _GENERIC, 0, ctypes.byref(found)):
         raise _failure("read")
     try:
         blob = ctypes.string_at(found.contents.CredentialBlob, found.contents.CredentialBlobSize)
@@ -88,9 +91,17 @@ def resolve(reference: str) -> str:
 
 def delete(target: str) -> None:
     """Remove exactly one generic credential; absence is already removed."""
+    _validate_target(target)
     api = _api()
-    if not api.CredDeleteW(target, _GENERIC, 0) and ctypes.get_last_error() != _NOT_FOUND:
+    if not api.CredDeleteW(target, _GENERIC, 0) and _last_error() != _NOT_FOUND:
         raise _failure("delete")
+
+
+def _validate_target(target: str) -> None:
+    if not target or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in target):
+        raise CredentialError(
+            "A credential target must be nonempty and contain no control characters."
+        )
 
 
 def _api() -> Any:
@@ -114,5 +125,11 @@ def _api() -> Any:
 
 
 def _failure(operation: str) -> CredentialError:
-    code = ctypes.get_last_error()
+    code = _last_error()
     return CredentialError(f"Windows credential {operation} failed (error {code}).")
+
+
+def _last_error() -> int:
+    if sys.platform != "win32":
+        raise CredentialError("Windows credential references require Windows Credential Manager.")
+    return ctypes.get_last_error()

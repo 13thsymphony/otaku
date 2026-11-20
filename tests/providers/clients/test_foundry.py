@@ -43,7 +43,10 @@ class TestRequest:
         assert body["max_tokens"] == 4096
         assert body["stream"] is True
         assert not {"temperature", "seed", "stream_options"} & body.keys()
-        assert knobs == {"thinking": {"type": "adaptive"}, "output_config": {"effort": "high"}}
+        assert knobs == {
+            "thinking": {"type": "adaptive", "display": "summarized"},
+            "output_config": {"effort": "high"},
+        }
 
     def test_volatile_rows_and_everything_after_them_are_not_cache_marked(self) -> None:
         body, _ = _completion()._chat_request(
@@ -60,6 +63,19 @@ class TestRequest:
         )
         assert body["stop_sequences"] == ["END"]
         assert isinstance(body["max_tokens"], int) and body["max_tokens"] > 0
+
+    def test_zero_output_tokens_can_prewarm_the_cache(self) -> None:
+        body, _ = _completion()._chat_request(
+            "my-opus", [_Turn("user", "u")], {"max_tokens": 0}, level=None
+        )
+        assert body["max_tokens"] == 0
+
+    @pytest.mark.parametrize("cap", [-1, True, "4096"])
+    def test_the_output_cap_must_be_a_nonnegative_integer(self, cap: object) -> None:
+        with pytest.raises(ProviderError):
+            _completion()._chat_request(
+                "my-opus", [_Turn("user", "u")], {"max_tokens": cap}, level=None
+            )
 
     @pytest.mark.parametrize("level", ["none", "off", "0", "1024", "minimal", "typo"])
     def test_opus_55_never_sends_disabled_thinking_or_a_manual_budget(self, level: str) -> None:
@@ -149,12 +165,13 @@ class TestEvents:
             7,
             None,
         )
-        assert (
-            completion._finish_reason(
-                {"type": "message_delta", "delta": {"stop_reason": "max_tokens"}}
+        for reason in ("max_tokens", "model_context_window_exceeded"):
+            assert (
+                completion._finish_reason(
+                    {"type": "message_delta", "delta": {"stop_reason": reason}}
+                )
+                == "length"
             )
-            == "length"
-        )
 
     def test_a_truncated_stream_is_not_a_success(self) -> None:
         with pytest.raises(UnreachableError):

@@ -18,6 +18,7 @@ import re
 from collections.abc import Generator, Iterator, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
+from urllib.parse import quote
 
 from otaku.providers.errors import DeclinedError, ProviderError, UnauthorizedError, UnreachableError
 from otaku.providers.http import ASK_TIMEOUT, ErrorSink, Http, positive_int
@@ -42,8 +43,8 @@ class Thinking:
     whether it may be switched off, whether a manual budget holds."""
 
     efforts: frozenset[str] = frozenset()
-    disabled: bool = False
-    budget: bool = False
+    can_disable: bool = False
+    can_set_budget: bool = False
 
 
 @dataclass(frozen=True)
@@ -56,16 +57,22 @@ class Spec:
 
 
 _ADAPTIVE = Thinking(efforts=frozenset(_EFFORTS))
-_MANUAL = Thinking(disabled=True, budget=True)
+_ADAPTIVE_OFF = Thinking(efforts=frozenset(_EFFORTS), can_disable=True)
+_MANUAL = Thinking(can_disable=True, can_set_budget=True)
 _MODELS = {
     **{
         name: Spec(1_000_000, 128_000, _ADAPTIVE)
         for name in (
             "claude-opus-5-5",
             "claude-opus-5-5-fast",
+            "claude-sonnet-5-5",
+        )
+    },
+    **{
+        name: Spec(1_000_000, 128_000, _ADAPTIVE_OFF)
+        for name in (
             "claude-opus-5",
             "claude-opus-4-8",
-            "claude-sonnet-5-5",
             "claude-sonnet-5",
             "claude-haiku-5-5",
         )
@@ -79,19 +86,20 @@ def spec_of(model_id: str) -> Spec | None:
     return _MODELS.get(model_id) or _MODELS.get(_DATED.sub("", model_id))
 
 
-def model_info(name: str, spec: Spec | None, *, vision: bool | None = True) -> ModelInfo:
+def model_info(name: str, spec: Spec | None) -> ModelInfo:
     """A listing row for a model that thinks as `spec` says."""
     thinking = spec.thinking if spec else None
+    known = True if spec else None
     return ModelInfo(
         name,
         context_length=spec.context if spec else None,
         max_output_tokens=spec.output if spec else None,
-        capabilities=capabilities(thinking, vision=vision),
+        capabilities=capabilities(thinking, vision=known, structured=known),
     )
 
 
 def capabilities(
-    thinking: Thinking | None, *, vision: bool | None = True, structured: bool | None = True
+    thinking: Thinking | None, *, vision: bool | None = None, structured: bool | None = None
 ) -> ModelCapabilities:
     efforts = thinking.efforts if thinking else None
     return ModelCapabilities(
@@ -101,10 +109,12 @@ def capabilities(
         structured_output=structured,
         supported_params=_PARAMS,
         reasoning_efforts=(
-            efforts | {"none"} if efforts and thinking and thinking.disabled else efforts
+            efforts | {"none"} if efforts and thinking and thinking.can_disable else efforts
         ),
-        reasoning_switch=bool(thinking and thinking.disabled and not thinking.efforts),
-        reasoning_budget=bool(thinking and thinking.budget),
+        reasoning_switch=(
+            thinking.can_disable and not thinking.efforts if thinking is not None else None
+        ),
+        reasoning_budget=thinking.can_set_budget if thinking is not None else None,
     )
 
 
@@ -127,16 +137,29 @@ class AnthropicModels(OpenAIModels):
             raise UnauthorizedError(f"No api key for {self._config.name}.")
         models: list[ModelInfo] = []
         after = ""
+        cursors: set[str] = set()
         while True:
             data = http.get(f"{self._config.url}/models?limit=1000{after}")
             entries = data.get("data") if isinstance(data, dict) else None
-            for entry in entries if isinstance(entries, list) else []:
-                if isinstance(entry, dict) and isinstance(entry.get("id"), str):
-                    models.append(self._entry(entry))
-            last = data.get("last_id") if isinstance(data, dict) else None
-            if not (isinstance(data, dict) and data.get("has_more") is True and last):
+            has_more = data.get("has_more") if isinstance(data, dict) else None
+            if not isinstance(entries, list) or not isinstance(has_more, bool):
+                raise ProviderError(f"{self._config.name} returned an invalid models page.")
+            if has_more:
+                last = data.get("last_id")
+                if not isinstance(last, str) or not last or last in cursors:
+                    raise ProviderError(f"{self._config.name} returned an invalid models cursor.")
+                cursors.add(last)
+                after = f"&after_id={quote(last, safe='')}"
+            for entry in entries:
+                if (
+                    not isinstance(entry, dict)
+                    or not isinstance(entry.get("id"), str)
+                    or not entry["id"]
+                ):
+                    raise ProviderError(f"{self._config.name} returned an invalid model.")
+                models.append(self._entry(entry))
+            if not has_more:
                 break
-            after = f"&after_id={last}"
         return sorted(models, key=lambda model: model.name)
 
     def _entry(self, entry: dict[str, Any]) -> ModelInfo:
@@ -174,6 +197,12 @@ class AnthropicCompletion(OpenAICompletion):
     def _chat_url(self) -> str:
         return f"{self._config.url}/messages"
 
+    @staticmethod
+    def _refusal_words(knobs: dict[str, object]) -> set[str]:
+        # "type" and "display" occur in unrelated request fields, so
+        # neither alone proves that thinking was refused.
+        return OpenAICompletion._refusal_words(knobs) - {"type", "display"}
+
     def _thinking_of(self, model: str) -> Thinking | None:
         """How `model` thinks: as listed, else as a known model."""
         if isinstance(self._models, AnthropicModels) and model in self._models.thinking:
@@ -197,6 +226,9 @@ class AnthropicCompletion(OpenAICompletion):
         if "stop" in wire_params:
             wire_params["stop_sequences"] = wire_params.pop("stop")
         wire_params.setdefault("max_tokens", 4096)
+        max_tokens = _count(wire_params["max_tokens"])
+        if max_tokens is None:
+            raise ProviderError("Claude max_tokens must be a nonnegative integer.")
         system, wire = _blocks(messages, self._cache_ttl())
         body: dict[str, object] = {
             "model": model,
@@ -208,7 +240,7 @@ class AnthropicCompletion(OpenAICompletion):
             body["system"] = system
         knobs: dict[str, object] = {}
         if level is not None:
-            knobs = _knobs(model, level, self._thinking_of(model), wire_params["max_tokens"])
+            knobs = _knobs(model, level, self._thinking_of(model), max_tokens)
         return body, knobs
 
     def count_chat_tokens(
@@ -219,12 +251,14 @@ class AnthropicCompletion(OpenAICompletion):
         level: str | None = None,
         timeout: float = ASK_TIMEOUT,
     ) -> int | None:
-        body, knobs = self._chat_request(model, messages, {}, level=level)
+        body, _ = self._chat_request(model, messages, {}, level=None)
         # Effort and max_tokens do not affect input token counting.
         body.pop("stream")
         body.pop("max_tokens")
-        if "thinking" in knobs:
-            body["thinking"] = knobs["thinking"]
+        if level is not None:
+            knobs = _knobs(model, level, self._thinking_of(model), None)
+            if "thinking" in knobs:
+                body["thinking"] = knobs["thinking"]
         data = self._http.post(
             f"{self._chat_url()}/count_tokens",
             body,
@@ -262,7 +296,7 @@ class AnthropicCompletion(OpenAICompletion):
         reason = delta.get("stop_reason") if isinstance(delta, dict) else None
         if reason == "refusal":
             raise DeclinedError("The model declined the request.")
-        if reason == "max_tokens":
+        if reason in ("max_tokens", "model_context_window_exceeded"):
             return "length"
         if reason in ("end_turn", "stop_sequence"):
             return "stop"
@@ -355,23 +389,25 @@ def _stated_thinking(stated: dict[str, Any]) -> Thinking:
         efforts = frozenset(level for level in _EFFORTS if _supported(effort.get(level)))
     return Thinking(
         efforts=efforts,
-        disabled=_supported(types.get("disabled")) is True,
-        budget=_supported(types.get("enabled")) is True,
+        can_disable=_supported(types.get("disabled")) is True,
+        can_set_budget=_supported(types.get("enabled")) is True,
     )
 
 
 def _knobs(
-    model: str, level: str, thinking: Thinking | None, max_tokens: object
+    model: str, level: str, thinking: Thinking | None, max_tokens: int | None
 ) -> dict[str, object]:
     if thinking is not None:
         if level in thinking.efforts:
-            return {"thinking": {"type": "adaptive"}, "output_config": {"effort": level}}
-        if level in _OFF and thinking.disabled:
+            return {
+                "thinking": {"type": "adaptive", "display": "summarized"},
+                "output_config": {"effort": level},
+            }
+        if level in _OFF and thinking.can_disable:
             return {"thinking": {"type": "disabled"}}
-        if thinking.budget and (level == "on" or level.isdecimal()):
+        if thinking.can_set_budget and (level == "on" or level.isdecimal()):
             budget = 1024 if level == "on" else int(level)
-            cap = _count(max_tokens)
-            if budget < 1024 or cap is None or budget >= cap:
+            if budget < 1024 or (max_tokens is not None and budget >= max_tokens):
                 raise ProviderError(
                     f"{model} needs a thinking budget of at least 1024, below max_tokens."
                 )

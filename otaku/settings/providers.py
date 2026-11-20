@@ -22,7 +22,7 @@ class ProviderConfig:
     # Prompt-cache breakpoints, where the provider supports them ("" = the
     # provider's default): "off" never marks, "5m"/"1h" mark with that TTL.
     prompt_cache: str = ""
-    # Foundry has no model-listing API: deployment name -> Claude model id.
+    # Foundry's Messages API has no model listing: deployment name -> Claude model id.
     deployments: dict[str, str] = field(default_factory=dict)
 
     @property
