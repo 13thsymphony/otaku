@@ -29,6 +29,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TypeVar
 
+from otaku.providers.clients.anthropic import AnthropicClient
 from otaku.providers.clients.foundry import FoundryClient
 from otaku.providers.clients.generic import GenericClient
 from otaku.providers.clients.koboldcpp import KoboldCppClient
@@ -57,6 +58,7 @@ ALL_CLIENTS: dict[str, type[OpenAIClient]] = {
     GenericClient.id: GenericClient,
     OpenRouterClient.id: OpenRouterClient,
     NanoGptClient.id: NanoGptClient,
+    AnthropicClient.id: AnthropicClient,
     FoundryClient.id: FoundryClient,
 }
 

@@ -375,9 +375,11 @@ domain touches it, through `app._store`.
 
 `providers/clients/` owns each engine's adaptation. `openai/` supplies the client composition,
 model cache, request types and completion lifecycle shared by the engines. The lifecycle delegates
-the chat endpoint, deltas, stop reason, usage and stream framing to hooks. `clients/foundry.py`
-implements the native Anthropic Messages wire through those hooks, with deployment names and
-model identities from `settings.providers.ProviderConfig.deployments`.
+the chat endpoint, deltas, stop reason, usage and stream framing to hooks. `clients/anthropic.py`
+implements the native Anthropic Messages wire through those hooks and lists models with the
+capabilities `/v1/models` states, its table of known Claude models standing in where an entry
+states none. `clients/foundry.py` subclasses it, with deployment names and model identities from
+`settings.providers.ProviderConfig.deployments`.
 
 `encryption.keys` resolves sealed keys and Windows credential references at launch, before
 configuration is injected into the providers. `encryption.credentials` owns the Windows Credential

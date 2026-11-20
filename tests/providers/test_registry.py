@@ -25,6 +25,7 @@ class TestTheRoster:
             "generic",
             "openrouter",
             "nanogpt",
+            "anthropic",
             "foundry",
         ]
 

@@ -185,10 +185,34 @@ After you've chosen a model, you land at the prompt. The model picker is also av
 To give you an idea of the features and what play looks like, two sample stories are imported on
 first start.
 
+### Anthropic Claude
+
+The **Anthropic** provider talks to Anthropic's own API (`https://api.anthropic.com`) over
+the native Messages API, including streaming text and thinking, images, prompt caching and
+token counting. Choose it in the model picker and enter your API key, or set
+`ANTHROPIC_API_KEY` before the first start. The section in `configs/providers.toml` is:
+
+```toml
+[anthropic]
+url = "https://api.anthropic.com/v1"
+api_key = "" # reads ANTHROPIC_API_KEY when empty
+prompt_cache = "5m" # "1h" or "off" are also supported
+```
+
+The picker lists every model on your account with the context length, reply limit, vision and
+thinking controls Anthropic states for it. Opus 5.5 and the other adaptive models accept `low`,
+`medium`, `high`, `xhigh` and `max` effort levels; Haiku 4.5 uses an on/off switch or a
+thinking budget of at least 1024 tokens, smaller than `max_tokens`. Sampling controls are
+omitted, a reply limit includes thinking tokens, and raw text completion is unavailable; use
+a chat-wire layout. System instructions must precede the conversation. An assistant-ending
+transcript continues with a user `Continue.` request, because newer Claude models reject
+assistant prefills. On Windows the key can also be a `wincred:` Credential Manager reference,
+as described for Foundry below.
+
 ### Azure Foundry Claude (version 2)
 
-The **Azure Foundry Claude** provider uses the native Anthropic Messages API, including
-streaming text and thinking, images, prompt caching and token counting. Add a section to
+The **Azure Foundry Claude** provider uses the same native Messages API as the Anthropic
+provider, with Azure's endpoint and deployments. Add a section to
 `configs/providers.toml` in your otaku home folder:
 
 ```toml
@@ -210,10 +234,7 @@ levels; it cannot disable thinking or use a manual budget. The same effort contr
 available for Azure-hosted Opus 5, Opus 4.8, Sonnet 5/5.5 and Haiku 5.5. Haiku 4.5 uses an
 on/off switch or a thinking budget of at least 1024 tokens, smaller than `max_tokens`.
 Other Claude identities can be configured without model-specific context or thinking facts.
-Sampling controls are omitted on this provider. A reply limit includes thinking tokens.
-Raw text completion is unavailable; use a chat-wire layout. System instructions must precede
-the conversation. An assistant-ending transcript continues with a user `Continue.` request,
-because newer Claude models reject assistant prefills.
+Sampling, completion and transcript rules are the Anthropic provider's, above.
 
 On Windows, store the API key in **Credential Manager** from a local masked prompt.
 From this checkout, after initializing the selected otaku home:

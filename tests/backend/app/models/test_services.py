@@ -15,6 +15,7 @@ from otaku.backend.app.models.services import (
     parameter_text,
     parse_stops,
 )
+from otaku.providers.clients.anthropic import AnthropicCompletion
 from otaku.providers.openai.completion import PROTOCOL_PARAMS
 from otaku.providers.openai.templates import PLAIN, TEXT_TEMPLATES, TextTemplate
 from otaku.providers.registry import ALL_CLIENTS
@@ -54,10 +55,14 @@ class TestParamsVocabulary:
         # A declaration outside the vocabulary names a parameter nobody
         # can set; one short of the protocol's own denies what every
         # OpenAI endpoint reads — but for the penalties, of which an
-        # engine may have one sampler (KoboldCpp's presence term).
+        # engine may have one sampler (KoboldCpp's presence term). The
+        # native Messages wire is no OpenAI endpoint: Claude refuses the
+        # sampling knobs.
         for kind, client_class in ALL_CLIENTS.items():
             declared = client_class.completion_class.supported_params
             assert declared <= set(PARAMETERS), kind
+            if issubclass(client_class.completion_class, AnthropicCompletion):
+                continue
             assert PROTOCOL_PARAMS - {"presence_penalty", "frequency_penalty"} <= declared, kind
 
 

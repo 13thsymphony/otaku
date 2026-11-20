@@ -91,6 +91,8 @@ class ModelServer:
         self.unload_status: int | None = None  # set → LM Studio's /unload answers this status
         self.ps_status: int | None = None  # set → /api/ps answers this status instead
         self.token_count: int | None = None  # every count endpoint answers this; None → 404
+        # Anthropic's /v1/models rows, served under /anthropic/v1/models.
+        self.anthropic_models: list[dict[str, Any]] = []
         self.router = False  # True → llama.cpp's router listing and load/unload doors
         self.router_failed: set[str] = set()  # names whose load ends failed, unloaded
         self.router_sleeping: set[str] = set()  # loaded names the router put to sleep
@@ -272,6 +274,22 @@ class ModelServer:
                                 }
                                 for name in outer.models
                             ]
+                        }
+                    )
+                    return
+                if path.endswith("/anthropic/v1/models"):
+                    if not self._authorized():
+                        return
+                    # One page per request, so a listing must follow the cursor.
+                    claude = outer.anthropic_models
+                    after = self.path.split("after_id=", 1)[1] if "after_id=" in self.path else ""
+                    start = next((i + 1 for i, row in enumerate(claude) if row["id"] == after), 0)
+                    page = claude[start : start + 1]
+                    self._json(
+                        {
+                            "data": page,
+                            "has_more": start + 1 < len(claude),
+                            "last_id": page[-1]["id"] if page else None,
                         }
                     )
                     return
