@@ -1,4 +1,4 @@
-"""Model servers behind the OpenAI wire protocol.
+"""Model servers behind OpenAI and Foundry's Anthropic wire protocols.
 
 One secret per module: `http` is the one transport and the only home
 of httpx, `errors` what can go wrong, named, `openai/` the protocol
@@ -9,7 +9,8 @@ writes a recording down, and `client` the identity every engine
 subclasses (the section name, the key and its account, the three
 halves it owns) — `registry` the lookup, the fan-out and the
 probe, `smoothing` the jitter buffer, and `clients/` one engine per
-module.
+module. Foundry uses native Messages blocks and SSE through the shared
+completion lifecycle, with explicit deployment mappings in its config.
 
 `ProviderConfig` lives in `settings.providers` (provider settings are
 settings) and is re-exported here as part of this package's own

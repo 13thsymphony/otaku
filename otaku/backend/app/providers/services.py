@@ -15,7 +15,7 @@ from typing import Literal
 
 from otaku.backend.app.core.services import App
 from otaku.backend.errors import Invalid, NotFound, Unavailable
-from otaku.encryption import SealedError, seal
+from otaku.encryption import SealedError, seal, unseal
 from otaku.formatting import toml_key, toml_scalar
 from otaku.providers import (
     ALL_CLIENTS,
@@ -231,7 +231,7 @@ def update_provider(
             said.append(f"Cleared {word} for {name}.")
             if getattr(config, attr):
                 edits.append(surgery.set_key(name, attr, f'{attr} = ""'))
-                config = replace(config, **{attr: ""})
+                config = replace(config, url="") if attr == "url" else replace(config, api_key="")
             continue
         said.append(f"Saved {word} for {name}.")
         if attr == "url":
@@ -244,11 +244,14 @@ def update_provider(
                 sealed = seal(
                     value, key_file=app._paths.config_key_file, service=app._paths.keychain_service
                 )
+                value = unseal(
+                    value, key_file=app._paths.config_key_file, service=app._paths.keychain_service
+                )
             except SealedError as e:
                 raise Unavailable(f"Save failed: {e}") from e
             line = f"api_key = {toml_scalar(sealed)}"
         edits.append(surgery.set_key(name, attr, line))
-        config = replace(config, **{attr: value})
+        config = replace(config, url=value) if attr == "url" else replace(config, api_key=value)
     if edits:
         # A provider not in providers.toml yet gets its section written
         # first — how a cloud provider is added deliberately. One that

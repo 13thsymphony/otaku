@@ -185,6 +185,57 @@ After you've chosen a model, you land at the prompt. The model picker is also av
 To give you an idea of the features and what play looks like, two sample stories are imported on
 first start.
 
+### Azure Foundry Claude (version 2)
+
+The **Azure Foundry Claude** provider uses the native Anthropic Messages API, including
+streaming text and thinking, images, prompt caching and token counting. Add a section to
+`configs/providers.toml` in your otaku home folder:
+
+```toml
+[foundry]
+url = "https://YOUR-RESOURCE.services.ai.azure.com/anthropic"
+api_key = "" # reads ANTHROPIC_FOUNDRY_API_KEY when empty
+prompt_cache = "5m" # "1h" or "off" are also supported
+deployments = { YOUR-DEPLOYMENT = "claude-opus-5-5" }
+```
+
+The URL can also end in `/v1` or `/v1/messages`. Deployment names must match Azure exactly;
+the values identify the underlying Claude models, even when a deployment has a custom name.
+Foundry v2 has no model-listing endpoint: the picker lists the configured deployments after
+validating each with a token-count request. Restart otaku after editing the file, then select
+the deployment from the model picker in either frontend.
+
+Opus 5.5 uses adaptive thinking and accepts `low`, `medium`, `high`, `xhigh` and `max` effort
+levels; it cannot disable thinking or use a manual budget. The same effort controls are
+available for Azure-hosted Opus 5, Opus 4.8, Sonnet 5/5.5 and Haiku 5.5. Haiku 4.5 uses an
+on/off switch or a thinking budget of at least 1024 tokens, smaller than `max_tokens`.
+Other Claude identities can be configured without model-specific context or thinking facts.
+Sampling controls are omitted on this provider. A reply limit includes thinking tokens.
+Raw text completion is unavailable; use a chat-wire layout. System instructions must precede
+the conversation. An assistant-ending transcript continues with a user `Continue.` request,
+because newer Claude models reject assistant prefills.
+
+On Windows, store the API key in **Credential Manager** from a local masked prompt.
+From this checkout, after initializing the selected otaku home:
+
+```powershell
+uv run python scripts\configure_foundry.py `
+  --home "$HOME\.otaku" `
+  --endpoint "https://YOUR-RESOURCE.services.ai.azure.com/anthropic/v1/messages" `
+  --deployment "YOUR-DEPLOYMENT" --model "claude-opus-5-5"
+```
+
+Right-click to paste at the API-key prompt; only `*` feedback is displayed.
+The script saves `api_key = "wincred:otaku/azure-foundry"` rather than the key itself.
+Use `--target` for a different credential name. Run it again to rotate the key; restart
+otaku to load it. Windows protects the credential for your user account, including across
+reboots. Do not paste keys into chat, commands or configuration files. A missing credential
+is reported at launch; it never falls back to a plaintext file. These references work only
+on Windows and must be provisioned separately when moving a configuration to another machine.
+API-key authentication is supported; Microsoft Entra ID authentication is not implemented.
+
+See [Microsoft's deployment and API guide](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-claude?tabs=python).
+
 ## Terminal user guide
 
 Both the web interface and the terminal share the same functions; the difference is that in the

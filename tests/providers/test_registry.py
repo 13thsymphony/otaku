@@ -15,7 +15,7 @@ MINE = ProviderConfig(name="mine", url="http://localhost:9/v1")
 
 
 class TestTheRoster:
-    def test_the_eight_engines_in_the_panels_order(self) -> None:
+    def test_the_engines_in_the_panels_order(self) -> None:
         assert list(ALL_CLIENTS) == [
             "llamacpp",
             "koboldcpp",
@@ -25,6 +25,7 @@ class TestTheRoster:
             "generic",
             "openrouter",
             "nanogpt",
+            "foundry",
         ]
 
     def test_every_client_answers_to_its_own_id(self) -> None:

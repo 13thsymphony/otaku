@@ -409,6 +409,8 @@ class ModelServer:
                     return True
                 if self.headers.get("Authorization") == f"Bearer {outer.api_key}":
                     return True
+                if "/anthropic/" in self.path and self.headers.get("x-api-key") == outer.api_key:
+                    return True
                 self.send_response(401)
                 self.end_headers()
                 return False
@@ -468,6 +470,8 @@ class ModelServer:
                     self._json(outer.balances)
                     return
                 posted = self.path.split("?", 1)[0].rstrip("/")
+                if "/anthropic/" in posted and not self._authorized():
+                    return
                 if outer.template_reads is not None and posted.endswith("/apply-template"):
                     # The prompt one turn renders to, the kwargs the
                     # template reads written into it.
@@ -575,6 +579,9 @@ class ModelServer:
                     return
                 if outer.headers_delay:
                     time.sleep(outer.headers_delay)
+                if posted.endswith("/anthropic/v1/messages"):
+                    self._anthropic(thinking, text)
+                    return
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
                 if outer.fail_after is not None:
@@ -628,6 +635,54 @@ class ModelServer:
                         self._event({"choices": [{"delta": {}}], "usage": usage})
                     if not outer.no_done:
                         self.wfile.write(b"data: [DONE]\n\n")
+
+            def _anthropic(self, thinking: str, text: str) -> None:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                with contextlib.suppress(BrokenPipeError, ConnectionResetError):
+                    if outer.decline is not None:
+                        self._event({"type": "error", "error": {"message": outer.decline}})
+                        return
+                    self._event(
+                        {
+                            "type": "message_start",
+                            "message": {
+                                "usage": {
+                                    "input_tokens": 7,
+                                    "output_tokens": 0,
+                                    "cache_read_input_tokens": outer.cached_tokens or 0,
+                                    "cache_creation_input_tokens": 3,
+                                }
+                            },
+                        }
+                    )
+                    for kind, value in (("thinking", thinking), ("text", text)):
+                        step = outer.chunk_size or max(1, len(value) // 3)
+                        for sent, i in enumerate(range(0, len(value), step)):
+                            if outer.fail_after is not None and sent >= outer.fail_after:
+                                return
+                            if outer.chunk_delay:
+                                time.sleep(outer.chunk_delay)
+                            self._event(
+                                {
+                                    "type": "content_block_delta",
+                                    "delta": {"type": f"{kind}_delta", kind: value[i : i + step]},
+                                }
+                            )
+                    self._event(
+                        {
+                            "type": "message_delta",
+                            "usage": {"output_tokens": 5},
+                            "delta": {
+                                "stop_reason": "end_turn"
+                                if outer.finish == "stop"
+                                else outer.finish,
+                            },
+                        }
+                    )
+                    if not outer.no_done:
+                        self._event({"type": "message_stop"})
 
             def _event(self, payload: dict[str, Any]) -> None:
                 self.wfile.write(b"data: " + json.dumps(payload).encode() + b"\n\n")

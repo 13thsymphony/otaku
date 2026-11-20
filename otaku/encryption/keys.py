@@ -3,7 +3,9 @@
 A sealed value is `sealed:` + base64 under a 32-byte sealing key that
 never sits beside the config: the OS keychain, or the given key file
 where no keychain tool exists (an existing key, wherever it is, is
-always reused). Wholly separate from the data plane (`crypto.data`):
+always reused). A `wincred:` reference resolves a Windows generic
+credential instead, without a sealing key or a copy in a file.
+Wholly separate from the data plane (`crypto.data`):
 encryption off leaves api keys sealed all the same, and neither plane
 can read the other's key material.
 """
@@ -17,6 +19,8 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from otaku.encryption._primitives import keychain, keyfile
 from otaku.encryption._primitives.aead import KEY_LEN, NONCE_LEN, EncryptionError
+from otaku.encryption.credentials import PREFIX as CREDENTIAL_PREFIX
+from otaku.encryption.credentials import CredentialError, resolve
 
 _PREFIX = "sealed:"
 _ACCOUNT = "config"  # the keychain account; the data plane's KEK uses "kek"
@@ -27,8 +31,8 @@ class SealedError(Exception):
 
 
 def is_sealed(value: str) -> bool:
-    """Whether a config value is a sealed token rather than plain text."""
-    return value.startswith(_PREFIX)
+    """Whether a value is protected: a sealed token or an OS credential reference."""
+    return value.startswith((_PREFIX, CREDENTIAL_PREFIX))
 
 
 def seal(value: str, *, key_file: Path, service: str) -> str:
@@ -61,6 +65,11 @@ def opener(*, key_file: Path, service: str) -> Callable[[str], str]:
     fetched: list[bytes | None] = []
 
     def open_one(value: str) -> str:
+        if value.startswith(CREDENTIAL_PREFIX):
+            try:
+                return resolve(value)
+            except CredentialError as e:
+                raise SealedError(str(e)) from e
         if not is_sealed(value):
             return value
         if not fetched:

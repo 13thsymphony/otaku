@@ -235,10 +235,8 @@ class OpenAICompletion:
         pacing, the caller's own thread is in the read and nothing
         ticks."""
         body, knobs = self._chat_request(model, messages, params, level=level)
-        url = f"{self._config.url}/chat/completions"
-        return self._relayed(
-            url, body, knobs, purpose, timeout, frames.chat_delta, watched, on_idle
-        )
+        url = self._chat_url()
+        return self._relayed(url, body, knobs, purpose, timeout, self._chat_delta, watched, on_idle)
 
     @final
     def text(
@@ -493,7 +491,7 @@ class OpenAICompletion:
                     sentence = frames.trouble(event)
                     if sentence and sentence not in trouble:
                         trouble.append(sentence)
-                    reason = frames.finish(event)
+                    reason = self._finish_reason(event)
                     if reason:
                         stats.finish_reason = reason
                     thought, content = read_delta(event)
@@ -578,6 +576,20 @@ class OpenAICompletion:
         raise UnreachableError(f"Lost the connection to {name}.")
 
     # ---------- the hooks ----------
+
+    def _chat_url(self) -> str:
+        """The chat endpoint; native Messages clients supply their own."""
+        return f"{self._config.url}/chat/completions"
+
+    @staticmethod
+    def _chat_delta(event: dict[str, Any]) -> tuple[str, str]:
+        """The chat wire's reasoning and text deltas."""
+        return frames.chat_delta(event)
+
+    @staticmethod
+    def _finish_reason(event: dict[str, Any]) -> str | None:
+        """The wire's stop reason in the app's vocabulary."""
+        return frames.finish(event)
 
     def _convert_params(self, params: dict[str, object]) -> dict[str, object]:
         """The params as this engine spells them: the app sends

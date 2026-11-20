@@ -3,7 +3,7 @@ type. `ProviderConfig` lives HERE (provider settings are settings); the
 providers package imports it, and nothing converts in between."""
 
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from otaku.formatting import toml_key, toml_scalar
@@ -13,7 +13,7 @@ from otaku.settings.config import ConfigError
 
 @dataclass(frozen=True)
 class ProviderConfig:
-    """One provider as configured: an OpenAI-compatible server."""
+    """One provider as configured: its endpoint, key and deployment mapping."""
 
     name: str
     url: str
@@ -22,6 +22,8 @@ class ProviderConfig:
     # Prompt-cache breakpoints, where the provider supports them ("" = the
     # provider's default): "off" never marks, "5m"/"1h" mark with that TTL.
     prompt_cache: str = ""
+    # Foundry has no model-listing API: deployment name -> Claude model id.
+    deployments: dict[str, str] = field(default_factory=dict)
 
     @property
     def base_url(self) -> str:
@@ -54,12 +56,24 @@ def load(path: Path) -> dict[str, ProviderConfig]:
         prompt_cache = str(entry.get("prompt_cache", ""))
         if prompt_cache not in ("", "off", "5m", "1h"):
             raise ConfigError(f"{path}: [{name}] prompt_cache must be 'off', '5m' or '1h'")
+        deployments = entry.get("deployments", {})
+        if not isinstance(deployments, dict) or any(
+            not isinstance(deployment, str)
+            or not deployment.strip()
+            or not isinstance(model, str)
+            or not model.startswith("claude-")
+            for deployment, model in deployments.items()
+        ):
+            raise ConfigError(
+                f"{path}: [{name}] deployments must map deployment names to Claude model ids"
+            )
         providers[name] = ProviderConfig(
             name=str(name),
             url=str(entry["url"]).rstrip("/"),
             api_key=str(entry.get("api_key", "")),
             keep_alive=str(entry.get("keep_alive", "")),
             prompt_cache=prompt_cache,
+            deployments=dict(deployments),
         )
     return providers
 
@@ -82,4 +96,10 @@ def render(providers: dict[str, ProviderConfig]) -> str:
             lines.append(f"keep_alive = {toml_scalar(config.keep_alive)}")
         if config.prompt_cache:
             lines.append(f"prompt_cache = {toml_scalar(config.prompt_cache)}")
+        if config.deployments:
+            entries = ", ".join(
+                f"{toml_key(name)} = {toml_scalar(model)}"
+                for name, model in config.deployments.items()
+            )
+            lines.append(f"deployments = {{ {entries} }}")
     return "\n".join(lines) + "\n"

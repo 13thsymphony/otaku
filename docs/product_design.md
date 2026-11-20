@@ -2,6 +2,13 @@
 
 **Note: the document is partly outdated.**
 
+## Model providers
+
+Stories can use local or hosted OpenAI-compatible models, or Azure-hosted Claude models in
+Microsoft Foundry through the native Anthropic Messages API. A Foundry deployment is selected
+by its configured deployment name. API keys may be sealed in configuration or referenced
+from Windows Credential Manager.
+
 ## Stories
 
 Roleplays / chats with an LLM are saved as stories. You start a story, and later you can branch

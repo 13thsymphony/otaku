@@ -1,7 +1,7 @@
 """Provider lookup and fan-out — and the probe that asks a provider
 before it is saved.
 
-The section name IS the engine: `ALL_CLIENTS` maps the eight names to
+The section name IS the engine: `ALL_CLIENTS` maps the supported names to
 their clients in the model picker's canonical order — the engines on
 this machine, the generic provider, the catalogs — and a
 section named anything else is not served: the registry leaves it out
@@ -29,6 +29,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TypeVar
 
+from otaku.providers.clients.foundry import FoundryClient
 from otaku.providers.clients.generic import GenericClient
 from otaku.providers.clients.koboldcpp import KoboldCppClient
 from otaku.providers.clients.llamacpp import LlamaCppClient
@@ -56,6 +57,7 @@ ALL_CLIENTS: dict[str, type[OpenAIClient]] = {
     GenericClient.id: GenericClient,
     OpenRouterClient.id: OpenRouterClient,
     NanoGptClient.id: NanoGptClient,
+    FoundryClient.id: FoundryClient,
 }
 
 
@@ -242,11 +244,17 @@ def autoconfigure() -> dict[str, ProviderConfig]:
     the variable is read at request time, never written, and setting
     it is the deliberate act that adds a catalog. What first run
     writes, and what a later launch founds where missing, so a catalog
-    appears the first launch that finds its variable and stays. The
-    generic provider is never founded: its url is nobody's to guess."""
+    appears the first launch that finds its variable and stays. Providers
+    without a fixed endpoint (generic and Foundry) are never founded:
+    their urls are nobody's to guess."""
     return {
         cls.id: cls.autoconfigure()
         for cls in ALL_CLIENTS.values()
         if cls.locality is Locality.LOCAL
-        or (cls.locality is Locality.REMOTE and cls.env_key and os.environ.get(cls.env_key))
+        or (
+            cls.locality is Locality.REMOTE
+            and cls.env_key
+            and os.environ.get(cls.env_key)
+            and cls.autoconfigure().url
+        )
     }
