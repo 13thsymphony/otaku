@@ -119,6 +119,7 @@ class NanoGptClient(OpenAIClient):
     id = "nanogpt"
     label = "NanoGPT"
     locality = Locality.REMOTE
+    can_edit_url = False
     env_key = "NANOGPT_API_KEY"
     auth_class = NanoGptAuth
     models_class = NanoGptModels

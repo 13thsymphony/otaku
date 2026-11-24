@@ -11,7 +11,7 @@ from typing import Any
 from prompt_toolkit.application import Application
 from prompt_toolkit.buffer import Buffer
 
-from otaku.terminal.api import Api, Locality, ModelKind, ModelRef, ModelRole, Refused
+from otaku.terminal.api import Api, ModelKind, ModelRef, ModelRole, Refused
 from otaku.terminal.api.providers import ListedProvider, ProviderField
 from otaku.terminal.screens.base import ListScreen
 
@@ -67,16 +67,16 @@ class ModelPickerBase(ListScreen):
         self._drawn_cursor_line = 0
 
         # The provider panel (the right side): the walkable field list —
-        # two rows per provider, except the cloud catalogs whose url is
-        # fixed (their API key alone) — its own cursor (both sides stay
-        # visible, so the base's one integer serves the models side and
-        # the key handling swaps), the inline editor.
+        # two rows per provider, except where the url is the provider's
+        # own (a cloud catalog's: its API key alone) — its own cursor
+        # (both sides stay visible, so the base's one integer serves the
+        # models side and the key handling swaps), the inline editor.
         self.side: str = "models"
         self.fields: list[tuple[str, ProviderField]] = [
             (provider.id, attr)
             for provider in providers
             for attr in _ATTRS
-            if attr != "url" or provider.locality is not Locality.REMOTE
+            if attr != "url" or provider.can_edit_url
         ]
         self.field_cursor: int = 0
         self.editing: bool = False

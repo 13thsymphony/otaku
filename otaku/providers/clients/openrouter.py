@@ -168,6 +168,7 @@ class OpenRouterClient(OpenAIClient):
     id = "openrouter"
     label = "OpenRouter"
     locality = Locality.REMOTE
+    can_edit_url = False
     env_key = "OPENROUTER_API_KEY"
     auth_class = OpenRouterAuth
     models_class = OpenRouterModels

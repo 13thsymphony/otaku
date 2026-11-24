@@ -486,14 +486,14 @@ function providerDetail(state, pane, provider) {
 }
 
 function urlField(state, provider) {
-  /* A local URL is editable — a port moves. A cloud URL is the
-     provider's own and shown dim, because reading it is useful and
-     changing it is not. */
+  /* A url is editable unless the provider says it is its own (a
+     catalog's): shown dim then, because reading it is useful and
+     changing it is not. A proxy, a region or a port moves the rest. */
   const input = element("input", "otk-field otk-field--mono");
   input.type = "url";
   input.dataset.provider = "url";
   input.value = provider.url;
-  input.disabled = provider.locality === "remote";
+  input.disabled = !provider.can_edit_url;
   if (!input.disabled) saveOnEnter(state, input, provider, "url");
   return input;
 }

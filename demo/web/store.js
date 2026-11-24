@@ -556,8 +556,8 @@ export function providers(scope = "") {
 export function provider(name) {
   const row = providers().providers.find((each) => each.id === name);
   if (!row) throw notFound(`No supported provider is named ${name}.`);
-  const { id, label, locality, configured, url, key_source } = row;
-  return { id, label, locality, configured, url, key_source };
+  const { id, label, locality, can_edit_url, configured, url, key_source } = row;
+  return { id, label, locality, can_edit_url, configured, url, key_source };
 }
 
 export function updateProvider(name) {
@@ -570,6 +570,7 @@ function demoProvider() {
     id: PROVIDER,
     label: "Demo",
     locality: "unknown",
+    can_edit_url: true,
     configured: true,
     url: "in this browser tab",
     asked: true,

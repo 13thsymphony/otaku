@@ -198,6 +198,32 @@ class TestDeployment:
         finally:
             backend.close()
 
+    def test_moving_the_url_keeps_the_deployments_and_takes_effect_live(
+        self,
+        tmp_path: Path,
+        server: ModelServer,
+    ) -> None:
+        root = tmp_path / "state"
+        set_config_provider(root, server)
+        backend_launch.open_app(root).close()
+        paths = Paths.resolve(root)
+        written = providers_file.load(paths.providers_file)
+        written["foundry"] = replace(_config(server), url="https://moved.invalid/anthropic/v1")
+        write_atomic(paths.providers_file, providers_file.render(written))
+        backend = backend_launch.open_app(root)
+        try:
+            api = Api(backend)
+            assert api.providers.get("foundry").can_edit_url
+            moved = server.url.removesuffix("/v1") + "/anthropic/v1/messages"
+            api.providers.update("foundry", url=moved)
+            listing = api.providers.list(scope="foundry")
+            assert "foundry" in listing.reachable
+            assert server.posts == ["/anthropic/v1/messages/count_tokens"]
+            saved = providers_file.load(paths.providers_file)["foundry"]
+            assert (saved.url, saved.deployments) == (moved, {"custom-opus": "claude-opus-5-5"})
+        finally:
+            backend.close()
+
 
 class TestConfiguration:
     @pytest.mark.parametrize(

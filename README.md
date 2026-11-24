@@ -190,7 +190,8 @@ first start.
 The **Anthropic** provider talks to Anthropic's own API (`https://api.anthropic.com`) over
 the native Messages API, including streaming text and thinking, images, prompt caching and
 token counting. Choose it in the model picker and enter your API key, or set
-`ANTHROPIC_API_KEY` before the first start. The section in `configs/providers.toml` is:
+`ANTHROPIC_API_KEY` before the first start. The picker's URL field can point it at a gateway
+or proxy that serves the same API. The section in `configs/providers.toml` is:
 
 ```toml
 [anthropic]
@@ -231,7 +232,9 @@ must match Azure exactly; the values identify the underlying Claude models, even
 deployment has a custom name. Authentication uses an API key; Microsoft Entra ID-only deployments
 are not supported. The native Messages endpoint has no model list: the picker lists the
 configured deployments after validating each with a token-count request. Restart otaku after
-editing the file, then select the deployment from the model picker in either frontend.
+editing the file, then select the deployment from the model picker in either frontend. The
+endpoint can also be changed in the picker's URL field, which takes effect at once; deployments
+are read from the file alone.
 
 Opus 5.5 uses adaptive thinking and accepts `low`, `medium`, `high`, `xhigh` and `max` effort
 levels; it cannot disable thinking or use a manual budget. The same effort controls are

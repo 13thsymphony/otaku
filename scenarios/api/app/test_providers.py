@@ -237,6 +237,15 @@ class TestGenericProvider:
         assert by_name["llamacpp"] is Locality.LOCAL
         assert by_name["openrouter"] is Locality.REMOTE
 
+    def test_a_catalog_url_is_its_own_and_a_claude_endpoint_can_move(self, app: App) -> None:
+        # Anthropic and Foundry are remote too, but a proxy, a gateway or
+        # another Azure resource can stand in their url's place.
+        movable = {p.id: p.can_edit_url for p in app.api.providers.list(probe=False).providers}
+        assert (movable["openrouter"], movable["nanogpt"]) == (False, False)
+        assert movable["generic"] and movable["llamacpp"]
+        assert movable["anthropic"] and movable["foundry"]
+        assert app.api.providers.get("anthropic").can_edit_url
+
     def test_the_listing_reads_a_window_the_server_sends(self, tmp_path) -> None:
         # /models is the protocol's; `context_length` on a row is the
         # catalogs' extension — read when present, unknown otherwise, and
@@ -2353,13 +2362,13 @@ class TestWindowsAndState:
 def _panel_walk(app: App, provider: str, attr: str) -> str:
     """The keys that take the panel's cursor from its first field to
     `provider`'s `attr`: Tab into the panel, then Down past every field
-    above — two per provider in the panel's order, the cloud catalogs'
-    fixed url excepted (`ModelPicker.fields`)."""
+    above — two per provider in the panel's order, a url the provider
+    holds as its own excepted (`ModelPicker.fields`)."""
     fields = [
         (p.id, a)
         for p in app.api.providers.list(probe=False).providers
         for a in ("url", "api_key")
-        if a != "url" or p.locality is not Locality.REMOTE
+        if a != "url" or p.can_edit_url
     ]
     return "\t" + _DOWN * fields.index((provider, attr))
 

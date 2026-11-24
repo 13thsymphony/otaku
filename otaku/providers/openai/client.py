@@ -49,6 +49,10 @@ class OpenAIClient:
     id: ClassVar[str]  # the engine's, wherever one is named: the registry, a section, a report
     label: ClassVar[str]  # how the provider panel captions it
     locality: ClassVar[Locality] = Locality.UNKNOWN
+    # Whether a reader may point the provider elsewhere: False for a
+    # catalog whose url is its own, True wherever a proxy, a region or a
+    # port can move it.
+    can_edit_url: ClassVar[bool] = True
     # The environment variable a missing key is read from; "" reads none.
     env_key: ClassVar[str] = ""
     # The parts, as the engine implements them.

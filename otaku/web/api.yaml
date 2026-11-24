@@ -2899,6 +2899,7 @@ components:
         id: { type: string }
         label: { type: string }
         locality: { type: string, enum: [local, remote, unknown], description: "Where its server runs, as its client knows it: the generic provider cannot say." }
+        can_edit_url: { type: boolean, description: "Its url may be pointed elsewhere; false for a catalog whose url is its own, and for a section no supported provider answers to." }
         configured: { type: boolean, description: "A section is written for it." }
         url: { type: string, description: "The url its section holds — the supported provider's default where none is written; \"\" for a section no supported provider answers to." }
         asked: { type: boolean, description: "It was in the slice asked for its models." }
@@ -3212,6 +3213,7 @@ components:
         id: { type: string }
         label: { type: string }
         locality: { type: string, enum: [local, remote, unknown] }
+        can_edit_url: { type: boolean, description: "Its url may be pointed elsewhere; false for a catalog whose url is its own." }
         configured: { type: boolean }
         url: { type: string }
         key_source: { type: [string, "null"], enum: [config, env, null] }

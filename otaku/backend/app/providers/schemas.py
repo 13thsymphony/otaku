@@ -35,8 +35,9 @@ class ProviderListing(Schema):
 class ListedProvider(Schema):
     """One provider in the panel: its id (which names its section), its
     label (the project's own spelling) and where it runs (a catalog's
-    url is fixed and its models billed; the generic provider's url could
-    name either, so it says unknown); whether a section is written and
+    models are billed; the generic provider's url could name either, so
+    it says unknown), whether its url may be pointed elsewhere (a
+    catalog's is its own); whether a section is written and
     the url it holds, whether it was asked and answered — the package's sentence for why
     where it was asked and could not (a dead server, a rejected key, an
     error status) — where the key it sends comes from (the key itself
@@ -46,6 +47,7 @@ class ListedProvider(Schema):
     id: str
     label: str
     locality: Locality
+    can_edit_url: bool
     configured: bool
     url: str
     asked: bool
@@ -59,12 +61,14 @@ class ListedProvider(Schema):
 class Provider(Schema):
     """One provider as its section stands — the one written, or the
     supported provider's default where none is yet: the supported
-    provider it is, whether a section is written, its url, and where the
-    key it sends comes from (the key itself never comes back out)."""
+    provider it is, whether its url may be pointed elsewhere, whether a
+    section is written, its url, and where the key it sends comes from
+    (the key itself never comes back out)."""
 
     id: str
     label: str
     locality: Locality
+    can_edit_url: bool
     configured: bool
     url: str
     key_source: KeySource | None
