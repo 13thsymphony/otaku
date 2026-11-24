@@ -3,12 +3,12 @@ before it is saved.
 
 The section name IS the engine: `ALL_CLIENTS` maps the supported names to
 their clients in the model picker's canonical order — the engines on
-this machine, the generic provider, the catalogs — and a
+this machine, the generic providers, the catalogs — and a
 section named anything else is not served: the registry leaves it out
 and names it in `ignored`, for the launch to say so. One section per
 engine; a second server of one kind is not a thing yet. First-run
 autoconfiguration writes sections for the local engines only; the
-generic provider and a cloud one are added deliberately, url and key
+generic providers and a cloud one are added deliberately, url and key
 and all.
 
 The `Registry` is composed by the backend package and injected
@@ -32,6 +32,7 @@ from typing import TypeVar
 from otaku.providers.clients.anthropic import AnthropicClient
 from otaku.providers.clients.foundry import FoundryClient
 from otaku.providers.clients.generic import GenericClient
+from otaku.providers.clients.generic_anthropic import GenericAnthropicClient
 from otaku.providers.clients.koboldcpp import KoboldCppClient
 from otaku.providers.clients.llamacpp import LlamaCppClient
 from otaku.providers.clients.lmstudio import LmStudioClient
@@ -56,6 +57,7 @@ ALL_CLIENTS: dict[str, type[OpenAIClient]] = {
     OmlxClient.id: OmlxClient,
     LmStudioClient.id: LmStudioClient,
     GenericClient.id: GenericClient,
+    GenericAnthropicClient.id: GenericAnthropicClient,
     OpenRouterClient.id: OpenRouterClient,
     NanoGptClient.id: NanoGptClient,
     AnthropicClient.id: AnthropicClient,
@@ -247,7 +249,7 @@ def autoconfigure() -> dict[str, ProviderConfig]:
     it is the deliberate act that adds a catalog. What first run
     writes, and what a later launch founds where missing, so a catalog
     appears the first launch that finds its variable and stays. Providers
-    without a fixed endpoint (generic and Foundry) are never founded:
+    without a fixed endpoint (the generic providers and Foundry) are never founded:
     their urls are nobody's to guess."""
     return {
         cls.id: cls.autoconfigure()

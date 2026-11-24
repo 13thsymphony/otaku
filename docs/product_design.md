@@ -5,9 +5,11 @@
 ## Model providers
 
 Stories can use local or hosted OpenAI-compatible models, or Claude models through the native
-Anthropic Messages API, from Anthropic directly or Azure-hosted in Microsoft Foundry. A Foundry
-deployment is selected by its configured deployment name. API keys may be sealed in configuration
-or referenced from Windows Credential Manager.
+Anthropic Messages API, from Anthropic directly, a custom compatible endpoint, or Azure-hosted
+in Microsoft Foundry. The generic OpenAI and Anthropic providers, direct Anthropic, and Foundry
+have independent URLs and credentials and can coexist. A Foundry deployment is selected by its
+configured deployment name. API keys may be sealed in configuration or referenced from Windows
+Credential Manager.
 
 ## Stories
 

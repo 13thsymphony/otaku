@@ -213,6 +213,33 @@ assistant-ending transcript continues with a user `Continue.` request, because n
 models reject assistant prefills. On Windows the key can also be a `wincred:` Credential Manager
 reference, as described for Foundry below.
 
+### Custom Anthropic-compatible APIs
+
+The **Generic Anthropic provider** is the native Messages equivalent of the **Generic OpenAI
+provider**. Give it its own URL and API key in the model picker in either frontend. Its settings
+are independent of **Anthropic**, **Azure Foundry Claude** and the generic OpenAI provider, so
+all four can be configured at the same time. No endpoint is selected by default.
+
+For [FableAI API](https://fableaiapi.com/docs), use `https://api.fableaiapi.com` in the URL field.
+The equivalent section in `configs/providers.toml` is:
+
+```toml
+[generic_anthropic]
+url = "https://api.fableaiapi.com/v1"
+api_key = "" # reads GENERIC_ANTHROPIC_API_KEY when empty
+prompt_cache = "5m" # "1h" or "off" are also supported
+```
+
+The URL may name the host, the `/v1` root or the `/v1/messages` endpoint. Authentication sends
+the provider's own key as `x-api-key`; keys can be sealed or use a Windows `wincred:` reference.
+It never borrows your direct Anthropic or Azure key. Use HTTPS for remote endpoints.
+
+The endpoint must support Messages streaming, `/v1/models` discovery and
+`/v1/messages/count_tokens`. Model discovery accepts Anthropic's paginated format and a complete
+OpenAI-shaped `{"object": "list", "data": [...]}` response. Model limits and capabilities come
+from the listing, with known Claude models supplying missing facts; gateway-specific model
+names have no assumed vision or thinking support.
+
 ### Azure Foundry Claude (version 2)
 
 The **Azure Foundry Claude** provider uses the same native Messages API as the Anthropic

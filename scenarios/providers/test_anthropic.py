@@ -1,6 +1,6 @@
 """Anthropic's own API through the real provider, app and native HTTP wire."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
@@ -47,6 +47,22 @@ _HAIKU = {"id": "claude-haiku-4-5-20251001", "type": "model", "capabilities": No
 
 
 class TestListing:
+    def test_gateway_model_lists_use_their_stated_context_without_pagination(
+        self, server: ModelServer
+    ) -> None:
+        client = _client(server)
+        server.anthropic_model_list = True
+        server.anthropic_models = [
+            {"id": "claude-fable-5-2", "context_length": 1_000_000},
+            {"id": "claude-haiku-4-5-20251001", "context_length": 100_000},
+        ]
+        fable, haiku = client.models.list()
+        assert fable.context_length == fable.context_window == 1_000_000
+        assert fable.capabilities.vision is None
+        assert fable.capabilities.reasoning_efforts is None
+        assert haiku.context_length == haiku.context_window == 100_000
+        assert len(server.gets) == 1
+
     def test_every_page_is_listed_with_the_facts_each_entry_states(
         self, server: ModelServer
     ) -> None:
@@ -139,22 +155,23 @@ class TestSetup:
         assert founded["anthropic"].url == "https://api.anthropic.com/v1"
         assert "foundry" not in founded
 
+    @pytest.mark.parametrize("provider", ["anthropic", "generic_anthropic"])
     def test_the_real_app_plays_and_persists_an_anthropic_reply(
-        self, tmp_path: Path, server: ModelServer
+        self, tmp_path: Path, server: ModelServer, provider: str
     ) -> None:
         root = tmp_path / "state"
         set_config_provider(root, server)
         backend_launch.open_app(root).close()
         paths = Paths.resolve(root)
         written = providers_file.load(paths.providers_file)
-        written["anthropic"] = _config(server)
+        written[provider] = replace(_config(server), name=provider)
         write_atomic(paths.providers_file, providers_file.render(written))
         backend = backend_launch.open_app(root)
         try:
             api = Api(backend)
-            api.providers.list(scope="anthropic")
-            api.app.update(models={ModelRole.WRITING: ModelRef("anthropic", "claude-opus-5-5")})
-            settings = api.providers.models.settings.get("anthropic", "claude-opus-5-5")
+            api.providers.list(scope=provider)
+            api.app.update(models={ModelRole.WRITING: ModelRef(provider, "claude-opus-5-5")})
+            settings = api.providers.models.settings.get(provider, "claude-opus-5-5")
             assert set(settings.choices.levels) == {
                 "unset",
                 "low",
@@ -164,7 +181,7 @@ class TestSetup:
                 "max",
             }
             assert not settings.choices.budget
-            api.providers.models.settings.update("anthropic", "claude-opus-5-5", think="high")
+            api.providers.models.settings.update(provider, "claude-opus-5-5", think="high")
             story = api.stories.create().value
             assert list(
                 api.stories.messages.create(
@@ -177,6 +194,52 @@ class TestSetup:
             sent = next(body for body in server.requests if body.get("stream") is True)
             assert sent["thinking"] == {"type": "adaptive", "display": "summarized"}
             assert sent["output_config"] == {"effort": "high"}
+        finally:
+            backend.close()
+
+    def test_custom_endpoint_edits_leave_the_other_providers_unchanged(
+        self, tmp_path: Path, server: ModelServer
+    ) -> None:
+        root = tmp_path / "state"
+        set_config_provider(root, server)
+        backend_launch.open_app(root).close()
+        paths = Paths.resolve(root)
+        written = providers_file.load(paths.providers_file)
+        written["anthropic"] = ProviderConfig(
+            name="anthropic", url="https://api.anthropic.com/v1", api_key="direct-key"
+        )
+        written["foundry"] = ProviderConfig(
+            name="foundry",
+            url="https://azure.invalid/anthropic/v1",
+            api_key="azure-key",
+            deployments={"opus": "claude-opus-5-5"},
+        )
+        write_atomic(paths.providers_file, providers_file.render(written))
+        backend = backend_launch.open_app(root)
+        try:
+            api = Api(backend)
+            before = providers_file.load(paths.providers_file)
+            custom = _config(server)
+            changed = api.providers.update(
+                "generic_anthropic", url=custom.url, api_key=custom.api_key
+            )
+            assert changed.value.can_edit_url
+            listing = api.providers.list(scope="generic_anthropic")
+            assert listing.reachable == {"generic_anthropic"}
+            assert len(next(p for p in listing.providers if p.answered).models) == 2
+            saved = providers_file.load(paths.providers_file)
+            for name in ("generic", "anthropic", "foundry"):
+                assert saved[name] == before[name]
+                assert api.providers.get(name).url == written[name].url
+            assert saved["generic_anthropic"].url == custom.url
+            assert saved["generic_anthropic"].api_key != custom.api_key
+        finally:
+            backend.close()
+        backend = backend_launch.open_app(root)
+        try:
+            assert Api(backend).providers.list(scope="generic_anthropic").reachable == {
+                "generic_anthropic"
+            }
         finally:
             backend.close()
 

@@ -142,6 +142,10 @@ class AnthropicModels(OpenAIModels):
             data = http.get(f"{self._config.url}/models?limit=1000{after}")
             entries = data.get("data") if isinstance(data, dict) else None
             has_more = data.get("has_more") if isinstance(data, dict) else None
+            # Some gateways serve a complete OpenAI-shaped list on this
+            # endpoint. An explicit pagination flag still takes precedence.
+            if isinstance(data, dict) and "has_more" not in data and data.get("object") == "list":
+                has_more = False
             if not isinstance(entries, list) or not isinstance(has_more, bool):
                 raise ProviderError(f"{self._config.name} returned an invalid models page.")
             if has_more:
@@ -183,7 +187,11 @@ class AnthropicModels(OpenAIModels):
             )
         return replace(
             model,
-            context_length=positive_int(entry.get("max_input_tokens")) or model.context_length,
+            context_length=(
+                positive_int(entry.get("max_input_tokens"))
+                or positive_int(entry.get("context_length"))
+                or model.context_length
+            ),
             max_output_tokens=positive_int(entry.get("max_tokens")) or model.max_output_tokens,
         )
 

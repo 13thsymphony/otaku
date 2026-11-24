@@ -94,6 +94,7 @@ class ModelServer:
         self.token_count: int | None = None  # every count endpoint answers this; None → 404
         # Anthropic's /v1/models rows, served under /anthropic/v1/models.
         self.anthropic_models: list[dict[str, Any]] = []
+        self.anthropic_model_list = False  # gateway: one OpenAI-shaped models page
         self.anthropic_cursor_missing = False
         self.anthropic_error_after: int | None = None
         self.router = False  # True → llama.cpp's router listing and load/unload doors
@@ -285,6 +286,9 @@ class ModelServer:
                         return
                     # One page per request, so a listing must follow the cursor.
                     claude = outer.anthropic_models
+                    if outer.anthropic_model_list:
+                        self._json({"object": "list", "data": claude})
+                        return
                     after = parse_qs(urlsplit(self.path).query).get("after_id", [""])[0]
                     start = next((i + 1 for i, row in enumerate(claude) if row["id"] == after), 0)
                     page = claude[start : start + 1]

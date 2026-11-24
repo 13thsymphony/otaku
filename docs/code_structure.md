@@ -378,8 +378,10 @@ model cache, request types and completion lifecycle shared by the engines. The l
 the chat endpoint, deltas, stop reason, usage and stream framing to hooks. `clients/anthropic.py`
 implements the native Anthropic Messages wire through those hooks and lists models with the
 capabilities `/v1/models` states, its table of known Claude models standing in where an entry
-states none. `clients/foundry.py` subclasses it, with deployment names and model identities from
-`settings.providers.ProviderConfig.deployments`.
+states none. The listing also accepts a gateway's complete OpenAI-shaped model list and its
+`context_length` extension. `clients/generic_anthropic.py` subclasses it for a separately configured
+compatible endpoint, with no default URL and its own key variable. `clients/foundry.py` subclasses
+it with deployment names and model identities from `settings.providers.ProviderConfig.deployments`.
 
 `encryption.keys` resolves sealed keys and Windows credential references before they reach a
 provider. `encryption.credentials` owns the Windows Credential Manager calls; neither providers

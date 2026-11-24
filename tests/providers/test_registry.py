@@ -23,6 +23,7 @@ class TestTheRoster:
             "omlx",
             "lmstudio",
             "generic",
+            "generic_anthropic",
             "openrouter",
             "nanogpt",
             "anthropic",
@@ -53,6 +54,7 @@ class TestAutoconfigure:
         # the generic provider is never founded, key or no key
         monkeypatch.setenv("OLLAMA_API_KEY", "from-env")
         monkeypatch.setenv("GENERIC_API_KEY", "from-env")
+        monkeypatch.setenv("GENERIC_ANTHROPIC_API_KEY", "from-env")
         assert list(autoconfigure()) == [*self.LOCAL, "openrouter"]
 
     def test_a_local_engine_is_founded_on_the_host_the_variable_names(
@@ -79,6 +81,22 @@ class TestAutoconfigure:
 
 
 class TestSections:
+    def test_the_custom_anthropic_endpoint_has_its_own_environment_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "direct-key")
+        monkeypatch.setenv("ANTHROPIC_FOUNDRY_API_KEY", "azure-key")
+        monkeypatch.setenv("GENERIC_API_KEY", "openai-key")
+        monkeypatch.delenv("GENERIC_ANTHROPIC_API_KEY", raising=False)
+        config = ProviderConfig(name="generic_anthropic", url="https://gateway.invalid/v1")
+        client = Registry({"generic_anthropic": config}).get("generic_anthropic")
+        assert client is not None
+        assert client.auth.api_key == ""
+        monkeypatch.setenv("GENERIC_ANTHROPIC_API_KEY", "gateway-key")
+        client = Registry({"generic_anthropic": config}).get("generic_anthropic")
+        assert client is not None
+        assert client.auth.headers["x-api-key"] == "gateway-key"
+
     def test_a_section_is_served_by_the_engine_its_name_is(self) -> None:
         registry = Registry({"ollama": OLLAMA, "generic": GENERIC})
         assert isinstance(registry.get("ollama"), OllamaClient)
